@@ -80,10 +80,13 @@ if (!code) {
 
 
 async function fetchProfile(token: string): Promise<any> {
+        console.log("profile token",token)
+
     // TODO: Call Web API
 }
 
 function populateUI(profile: any) {
+    console.log("profile info",profile)
     // TODO: Update UI with profile data
 }
 
