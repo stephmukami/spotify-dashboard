@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+
+
+
+
+@font-face {
+  font-family: "Inter", sans-serif;
+  display: swap;
+  /* can be a url or a download .tiff file */
+  src: url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+}
+
+
+
+
+@theme {
+  --font-display: "Inter", sans-serif;
+  --color-brand-green: #1ED760;
+  --color-brand-white: #FFFFFF;
+  --color-brand-black: #121212;
+
+}
+
+
+
