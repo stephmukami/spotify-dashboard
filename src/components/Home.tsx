@@ -1,30 +1,3 @@
-// import { useEffect } from "react";
-
-// function Home() {
-//   // This runs IMMEDIATELY when the file loads
-//   console.log("🔴 HOME FILE LOADED - THIS SHOULD ALWAYS SHOW");
-  
-//   // This runs when component renders
-//   console.log("🟡 HOME COMPONENT RENDERING");
-
-//   useEffect(() => {
-//     console.log("🟢 HOME USEEFFECT RUNNING");
-//     console.log("URL:", window.location.href);
-//     console.log("Search:", window.location.search);
-//   }, []);
-
-//   return (
-//     <div style={{ padding: "20px" }}>
-//       <h1>🏠 HOME PAGE LOADED</h1>
-//       <p>If you see this text, the component is rendering</p>
-//       <p>Current URL: {window.location.href}</p>
-//       <p>Search params: {window.location.search}</p>
-//     </div>
-//   );
-// }
-
-// export default Home;
-// Home.tsx
 import { useEffect, useState } from "react";
 
 function Home() {
@@ -38,23 +11,39 @@ function Home() {
   async function getAccessToken() {
     addDebug("=== TOKEN EXCHANGE START ===");
     addDebug(`Current URL: ${window.location.href}`);
-    addDebug(`Search params: ${window.location.search}`);
     
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
+    const state = params.get("state");
     
     addDebug(`Code from URL: ${code || 'NOT FOUND'}`);
-    addDebug(`All localStorage keys: ${JSON.stringify(Object.keys(localStorage))}`);
-    addDebug(`Verifier from storage: ${localStorage.getItem("verifier") || 'NOT FOUND'}`);
+    addDebug(`State from URL: ${state ? 'FOUND' : 'NOT FOUND'}`);
     
     if (!code) {
       addDebug("❌ No code found, skipping token exchange");
       return;
     }
 
-    const verifier = localStorage.getItem("verifier");
+    // Try multiple sources for the verifier
+    let verifier = localStorage.getItem("verifier");
+    addDebug(`Verifier from localStorage: ${verifier ? 'FOUND' : 'NOT FOUND'}`);
+    
     if (!verifier) {
-      addDebug("❌ CRITICAL: Verifier not found in localStorage!");
+      verifier = sessionStorage.getItem("verifier");
+      addDebug(`Verifier from sessionStorage: ${verifier ? 'FOUND' : 'NOT FOUND'}`);
+    }
+    
+    if (!verifier && state) {
+      try {
+        verifier = atob(state); // Decode from state parameter
+        addDebug(`✅ Verifier decoded from state parameter: ${verifier.substring(0, 20)}...`);
+      } catch (e) {
+        addDebug(`❌ Failed to decode state parameter: ${e}`);
+      }
+    }
+    
+    if (!verifier) {
+      addDebug("❌ CRITICAL: Verifier not found anywhere!");
       return;
     }
 
@@ -65,7 +54,7 @@ function Home() {
     body.append("redirect_uri", "https://spotify-dashboard-sxs8-stephmukamis-projects.vercel.app/home");
     body.append("code_verifier", verifier);
 
-    addDebug(`Request body: ${JSON.stringify(Object.fromEntries(body))}`);
+    addDebug(`Request body prepared with verifier: ${verifier.substring(0, 20)}...`);
 
     try {
       addDebug("🔄 Sending request to Spotify...");
@@ -88,9 +77,11 @@ function Home() {
       localStorage.setItem("access_token", data.access_token);
       addDebug("✅ Token saved to localStorage");
       
-      // Clean up URL
+      // Clean up
+      localStorage.removeItem("verifier");
+      sessionStorage.removeItem("verifier");
       window.history.replaceState({}, document.title, "/home");
-      addDebug("✅ URL cleaned");
+      addDebug("✅ URL cleaned and verifiers removed");
     } catch (error) {
       addDebug(`❌ Fetch error: ${error}`);
       console.error("Full error:", error);

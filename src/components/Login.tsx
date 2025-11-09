@@ -12,17 +12,14 @@ function Login() {
         console.log("Generated verifier (first 20 chars):", verifier.substring(0, 20) + "...");
         console.log("Generated challenge:", challenge);
         
-        // Save verifier
+        // Try both storage methods
         localStorage.setItem("verifier", verifier);
-        console.log("✅ Verifier saved to localStorage");
+        sessionStorage.setItem("verifier", verifier);
         
-        // IMMEDIATELY verify it was saved
-        const savedVerifier = localStorage.getItem("verifier");
-        console.log("✅ Verification - can read back:", savedVerifier === verifier ? "SUCCESS" : "FAILED");
-        console.log("localStorage keys after save:", Object.keys(localStorage));
+        // Also encode in state parameter as backup
+        const state = btoa(verifier); // Base64 encode the verifier
         
-        // Add a small delay to ensure localStorage is written
-        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log("✅ Verifier saved to localStorage and sessionStorage");
 
         const params = new URLSearchParams();
         params.append("client_id", clientId);
@@ -31,11 +28,12 @@ function Login() {
         params.append("scope", "user-read-private user-read-email");
         params.append("code_challenge_method", "S256");
         params.append("code_challenge", challenge);
+        params.append("state", state); // Add state parameter with encoded verifier
 
         const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
         console.log("🔗 About to redirect to Spotify...");
         
-        window.location.href = authUrl;  // Try this instead of document.location
+        window.location.href = authUrl;
     }
 
     function generateCodeVerifier(length: number) {
@@ -59,19 +57,13 @@ function Login() {
 
     async function initiateFetch() {
         console.log("🎬 Login page loaded");
-        console.log("Current URL:", window.location.href);
-        console.log("localStorage keys on Login page:", Object.keys(localStorage));
         
         const params = new URLSearchParams(window.location.search);
         const code = params.get("code");
         
-        console.log("Code in URL:", code);
-        
         if (!code) {
             console.log("No code found, starting auth flow...");
             await redirectToAuthCodeFlow(clientId);
-        } else {
-            console.log("⚠️ Code found on login page - this shouldn't happen!");
         }
     }
 
@@ -82,7 +74,7 @@ function Login() {
     return (
         <div style={{ padding: "20px" }}>
             <h3>Login page</h3>
-            <p>Check console for logs, then redirecting to Spotify...</p>
+            <p>Redirecting to Spotify...</p>
         </div>
     )
 }
