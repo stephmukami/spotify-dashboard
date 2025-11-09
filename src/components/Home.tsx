@@ -52,7 +52,7 @@ function Home() {
       return;
     }
 
-    const verifier = localStorage.getItem("verifier");
+    const verifier = sessionStorage.getItem("verifier");
     if (!verifier) {
       addDebug("❌ CRITICAL: Verifier not found in localStorage!");
       return;

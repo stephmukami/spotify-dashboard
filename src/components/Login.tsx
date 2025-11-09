@@ -7,7 +7,7 @@ function Login() {
         const verifier = generateCodeVerifier(128);
         const challenge = await generateCodeChallenge(verifier);
 
-        localStorage.setItem("verifier", verifier);
+        sessionStorage.setItem("verifier", verifier);
 
         const params = new URLSearchParams();
         params.append("client_id", clientId);
