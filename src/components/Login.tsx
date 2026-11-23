@@ -20,7 +20,8 @@ function Login() {
         const params = new URLSearchParams();
         params.append("client_id", clientId);
         params.append("response_type", "code");
-        params.append("redirect_uri", "https://spotify-dashboard-sxs8-stephmukamis-projects.vercel.app/home");
+        // Must exactly match an entry in the Spotify app's Redirect URIs.
+        params.append("redirect_uri", `${window.location.origin}/home`);
         params.append(
             "scope",
             [

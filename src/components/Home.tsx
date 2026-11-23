@@ -47,7 +47,8 @@ function Home() {
     body.append("client_id", "6c5fab85d9c94622b7272efbab39b088");
     body.append("grant_type", "authorization_code");
     body.append("code", code);
-    body.append("redirect_uri", "https://spotify-dashboard-sxs8-stephmukamis-projects.vercel.app/home");
+    // Must be identical to the redirect_uri sent in the authorize request.
+    body.append("redirect_uri", `${window.location.origin}/home`);
     body.append("code_verifier", verifier);
 
 
