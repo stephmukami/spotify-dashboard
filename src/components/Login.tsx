@@ -1,95 +1,95 @@
-import { useEffect, useRef } from 'react'
+import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
+
+const clientId = "6c5fab85d9c94622b7272efbab39b088";
+
+const scopes = [
+    "user-read-private",
+    "user-read-email",
+    "user-library-read",
+    "user-read-playback-position",
+    "user-read-playback-state",
+    "user-read-currently-playing",
+    "playlist-read-private",
+    "user-top-read",
+    "user-follow-read",
+];
+
+function generateRandomString(length: number) {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    // Use a cryptographically secure source; Math.random() is predictable.
+    const values = window.crypto.getRandomValues(new Uint8Array(length));
+    return Array.from(values, (v) => possible[v % possible.length]).join('');
+}
+
+async function generateCodeChallenge(codeVerifier: string) {
+    const data = new TextEncoder().encode(codeVerifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+async function redirectToAuthCodeFlow() {
+    const verifier = generateRandomString(128);
+    const challenge = await generateCodeChallenge(verifier);
+
+    // The verifier must never leave the browser. Keep it in storage only.
+    // `state` is an unrelated random value used for CSRF protection.
+    const state = generateRandomString(32);
+    localStorage.setItem("verifier", verifier);
+    localStorage.setItem("oauth_state", state);
+
+    const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: "code",
+        // Must exactly match an entry in the Spotify app's Redirect URIs.
+        redirect_uri: `${window.location.origin}/home`,
+        scope: scopes.join(" "),
+        code_challenge_method: "S256",
+        code_challenge: challenge,
+        state,
+    });
+
+    window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+}
 
 function Login() {
-    const clientId = "6c5fab85d9c94622b7272efbab39b088";
+    const [redirecting, setRedirecting] = useState(false);
 
-    async function redirectToAuthCodeFlow(clientId: string) {
-        console.log("🔐 Starting auth flow...");
-
-        const verifier = generateCodeVerifier(128);
-        const challenge = await generateCodeChallenge(verifier);
-
-        // The verifier must never leave the browser. Keep it in storage only.
-        // `state` is an unrelated random value used for CSRF protection.
-        const state = generateCodeVerifier(32);
-        localStorage.setItem("verifier", verifier);
-        localStorage.setItem("oauth_state", state);
-
-        console.log("✅ Verifier and state saved to localStorage");
-
-        const params = new URLSearchParams();
-        params.append("client_id", clientId);
-        params.append("response_type", "code");
-        // Must exactly match an entry in the Spotify app's Redirect URIs.
-        params.append("redirect_uri", `${window.location.origin}/home`);
-        params.append(
-            "scope",
-            [
-                "user-read-private",
-                "user-read-email",
-                "user-library-read",
-                "user-read-playback-position",
-                "user-read-playback-state",
-                "user-read-currently-playing",
-                "playlist-read-private",   // ✅ correct
-                "user-top-read",
-                "user-follow-read"
-            ].join(" ")
-        );
-
-        // params.append("scope", "user-read-private user-read-email");
-        params.append("code_challenge_method", "S256");
-        params.append("code_challenge", challenge);
-        params.append("state", state);
-
-        const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
-        console.log("🔗 About to redirect to Spotify...");
-
-        window.location.href = authUrl;
+    // Already logged in: go straight to the dashboard. If the token has
+    // expired, Home clears it and sends the user back here.
+    if (localStorage.getItem("access_token")) {
+        return <Navigate to="/home" replace />;
     }
 
-    function generateCodeVerifier(length: number) {
-        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        // Use a cryptographically secure source; Math.random() is predictable.
-        const values = window.crypto.getRandomValues(new Uint8Array(length));
-        return Array.from(values, (v) => possible[v % possible.length]).join('');
+    async function handleLogin() {
+        setRedirecting(true);
+        await redirectToAuthCodeFlow();
     }
-
-    async function generateCodeChallenge(codeVerifier: string) {
-        const data = new TextEncoder().encode(codeVerifier);
-        const digest = await window.crypto.subtle.digest('SHA-256', data);
-        return btoa(String.fromCharCode.apply(null, [...new Uint8Array(digest)]))
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '');
-    }
-
-    async function initiateFetch() {
-        console.log("🎬 Login page loaded");
-
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get("code");
-
-        if (!code) {
-            console.log("No code found, starting auth flow...");
-            await redirectToAuthCodeFlow(clientId);
-        }
-    }
-
-    // StrictMode runs effects twice in dev; without this guard the second run
-    // would overwrite the verifier after the first redirect was already built.
-    const started = useRef(false);
-
-    useEffect(() => {
-        if (started.current) return;
-        started.current = true;
-        initiateFetch()
-    }, [])
 
     return (
-        <div style={{ padding: "20px" }}>
-            <h3>Login page</h3>
-            <p>Redirecting to Spotify...</p>
+        <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
+            <h2>Spotify Dashboard</h2>
+            <p>Log in with your Spotify account to see your listening data.</p>
+            <button
+                onClick={handleLogin}
+                disabled={redirecting}
+                style={{
+                    background: "#1DB954",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "999px",
+                    padding: "12px 28px",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    cursor: redirecting ? "default" : "pointer",
+                    opacity: redirecting ? 0.7 : 1,
+                }}
+            >
+                {redirecting ? "Redirecting…" : "Log in with Spotify"}
+            </button>
         </div>
     )
 }
