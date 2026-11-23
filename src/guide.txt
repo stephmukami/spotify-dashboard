@@ -1,0 +1,28 @@
+Summary
+Best options for URL-based analysis:
+
+✅ Spotify Preview URL + Meyda.js - Free, works in browser, no API key needed
+✅ Musiio API - Commercial but accepts URLs/YouTube links
+✅ Web Audio API - Free, basic features, works with any audio URL
+
+The Spotify preview URL + Meyda approach is your best bet since it's free and doesn't require external API keys!
+aud music
+https://claude.ai/share/394404bb-616e-4d80-b76b-66470d0d08ca
+
+ENDPOINTS 
+- top tracks GET /artists/{id}/top-tracks
+- saved episodes /me/episodes
+- currently playing  GET /me/player/currently-playing
+- Get Current User's Playlists
+- Get User's Playlist
+- Get User's Saved Tracks
+- Get User's Top Items
+- Get Followed Artists
+- Get Current User's Profile
+- Get User's Saved Albums
+
+
+
+
+
+

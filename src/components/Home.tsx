@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function Home() {
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
@@ -24,26 +24,22 @@ function Home() {
       return;
     }
 
-    // Try multiple sources for the verifier
-    let verifier = localStorage.getItem("verifier");
+    // CSRF check: the state Spotify echoes back must match the one we generated.
+    const expectedState = localStorage.getItem("oauth_state");
+    if (!state || state !== expectedState) {
+      addDebug("❌ State mismatch. Ignoring this callback (possible CSRF or stale login).");
+      return;
+    }
+
+    // The verifier only ever lives in this origin's storage, never in the URL.
+    const verifier = localStorage.getItem("verifier");
     addDebug(`Verifier from localStorage: ${verifier ? 'FOUND' : 'NOT FOUND'}`);
-    
+
     if (!verifier) {
-      verifier = sessionStorage.getItem("verifier");
-      addDebug(`Verifier from sessionStorage: ${verifier ? 'FOUND' : 'NOT FOUND'}`);
-    }
-    
-    if (!verifier && state) {
-      try {
-        verifier = atob(state); // Decode from state parameter
-        addDebug(`✅ Verifier decoded from state parameter: ${verifier.substring(0, 20)}...`);
-      } catch (e) {
-        addDebug(`❌ Failed to decode state parameter: ${e}`);
-      }
-    }
-    
-    if (!verifier) {
-      addDebug("❌ CRITICAL: Verifier not found anywhere!");
+      addDebug(
+        `❌ Verifier not found. Make sure login started on ${window.location.origin}; ` +
+        "storage is per-origin, so starting on a different URL (e.g. a Vercel preview) loses it."
+      );
       return;
     }
 
@@ -54,7 +50,6 @@ function Home() {
     body.append("redirect_uri", "https://spotify-dashboard-sxs8-stephmukamis-projects.vercel.app/home");
     body.append("code_verifier", verifier);
 
-    addDebug(`Request body prepared with verifier: ${verifier.substring(0, 20)}...`);
 
     try {
       addDebug("🔄 Sending request to Spotify...");
@@ -66,7 +61,6 @@ function Home() {
 
       const data = await result.json();
       addDebug(`Response status: ${result.status}`);
-      addDebug(`Response data: ${JSON.stringify(data)}`);
 
       if (!result.ok) {
         addDebug(`❌ Token exchange failed: ${JSON.stringify(data)}`);
@@ -79,7 +73,7 @@ function Home() {
       
       // Clean up
       localStorage.removeItem("verifier");
-      sessionStorage.removeItem("verifier");
+      localStorage.removeItem("oauth_state");
       window.history.replaceState({}, document.title, "/home");
       addDebug("✅ URL cleaned and verifiers removed");
     } catch (error) {
@@ -88,7 +82,13 @@ function Home() {
     }
   }
 
+  // Auth codes are single-use. StrictMode's double effect run would send a
+  // second exchange that fails with invalid_grant, so only run once.
+  const exchanged = useRef(false);
+
   useEffect(() => {
+    if (exchanged.current) return;
+    exchanged.current = true;
     addDebug("🚀 Home component mounted, useEffect running");
     getAccessToken();
   }, []);
@@ -119,3 +119,4 @@ function Home() {
 }
 
 export default Home;
+

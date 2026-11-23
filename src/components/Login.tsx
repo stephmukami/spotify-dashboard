@@ -1,49 +1,57 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 function Login() {
     const clientId = "6c5fab85d9c94622b7272efbab39b088";
 
     async function redirectToAuthCodeFlow(clientId: string) {
         console.log("🔐 Starting auth flow...");
-        
+
         const verifier = generateCodeVerifier(128);
         const challenge = await generateCodeChallenge(verifier);
 
-        console.log("Generated verifier (first 20 chars):", verifier.substring(0, 20) + "...");
-        console.log("Generated challenge:", challenge);
-        
-        // Try both storage methods
+        // The verifier must never leave the browser. Keep it in storage only.
+        // `state` is an unrelated random value used for CSRF protection.
+        const state = generateCodeVerifier(32);
         localStorage.setItem("verifier", verifier);
-        sessionStorage.setItem("verifier", verifier);
-        
-        // Also encode in state parameter as backup
-        const state = btoa(verifier); // Base64 encode the verifier
-        
-        console.log("✅ Verifier saved to localStorage and sessionStorage");
+        localStorage.setItem("oauth_state", state);
+
+        console.log("✅ Verifier and state saved to localStorage");
 
         const params = new URLSearchParams();
         params.append("client_id", clientId);
         params.append("response_type", "code");
         params.append("redirect_uri", "https://spotify-dashboard-sxs8-stephmukamis-projects.vercel.app/home");
-        params.append("scope", "user-read-private user-read-email");
+        params.append(
+            "scope",
+            [
+                "user-read-private",
+                "user-read-email",
+                "user-library-read",
+                "user-read-playback-position",
+                "user-read-playback-state",
+                "user-read-currently-playing",
+                "playlist-read-private",   // ✅ correct
+                "user-top-read",
+                "user-follow-read"
+            ].join(" ")
+        );
+
+        // params.append("scope", "user-read-private user-read-email");
         params.append("code_challenge_method", "S256");
         params.append("code_challenge", challenge);
-        params.append("state", state); // Add state parameter with encoded verifier
+        params.append("state", state);
 
         const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
         console.log("🔗 About to redirect to Spotify...");
-        
+
         window.location.href = authUrl;
     }
 
     function generateCodeVerifier(length: number) {
-        let text = '';
-        let possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-        for (let i = 0; i < length; i++) {
-            text += possible.charAt(Math.floor(Math.random() * possible.length));
-        }
-        return text;
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        // Use a cryptographically secure source; Math.random() is predictable.
+        const values = window.crypto.getRandomValues(new Uint8Array(length));
+        return Array.from(values, (v) => possible[v % possible.length]).join('');
     }
 
     async function generateCodeChallenge(codeVerifier: string) {
@@ -57,17 +65,23 @@ function Login() {
 
     async function initiateFetch() {
         console.log("🎬 Login page loaded");
-        
+
         const params = new URLSearchParams(window.location.search);
         const code = params.get("code");
-        
+
         if (!code) {
             console.log("No code found, starting auth flow...");
             await redirectToAuthCodeFlow(clientId);
         }
     }
 
+    // StrictMode runs effects twice in dev; without this guard the second run
+    // would overwrite the verifier after the first redirect was already built.
+    const started = useRef(false);
+
     useEffect(() => {
+        if (started.current) return;
+        started.current = true;
         initiateFetch()
     }, [])
 
