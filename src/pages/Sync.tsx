@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { SyncResponse } from "../../shared/types";
 import { api, ApiError } from "../lib/api";
 import { useSession } from "../lib/session";
-import { getSpotifyToken, startLogin } from "../lib/spotifyAuth";
+import { getValidSpotifyToken, startLogin } from "../lib/spotifyAuth";
 
 /** Only allow in-app paths, so ?next= can't redirect to another site. */
 function safeNext(next: string | null) {
@@ -21,7 +21,7 @@ export default function Sync() {
   const [params] = useSearchParams();
   const next = safeNext(params.get("next"));
   const { refresh } = useSession();
-  const [state, setState] = useState<State>(() => (getSpotifyToken() ? { kind: "syncing" } : { kind: "needs-login" }));
+  const [state, setState] = useState<State>({ kind: "syncing" });
 
   const started = useRef(false);
 
@@ -29,12 +29,26 @@ export default function Sync() {
     if (started.current) return;
     started.current = true;
 
-    const token = getSpotifyToken();
-    if (!token) return;
+    /** Syncs with a valid token; on a 401 from Spotify, refreshes once and retries. */
+    async function syncWithRefresh(): Promise<SyncResponse | null> {
+      const token = await getValidSpotifyToken();
+      if (!token) return null;
+      try {
+        return await api.sync(token);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 401)) throw e;
+        const fresh = await getValidSpotifyToken({ forceRefresh: true });
+        return fresh ? api.sync(fresh) : null;
+      }
+    }
 
     (async () => {
       try {
-        const result = await api.sync(token);
+        const result = await syncWithRefresh();
+        if (!result) {
+          setState({ kind: "needs-login" });
+          return;
+        }
         await refresh();
         setState({ kind: "done", result });
         setTimeout(() => navigate(next, { replace: true }), 1500);

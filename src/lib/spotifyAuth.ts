@@ -10,6 +10,23 @@ const SCOPES = ["user-top-read"];
 const VERIFIER_KEY = "pkce_verifier";
 const STATE_KEY = "pkce_state";
 const TOKEN_KEY = "spotify_token";
+// localStorage so it survives new tabs and return visits; the short-lived access token stays per-tab.
+const REFRESH_KEY = "spotify_refresh_token";
+
+interface TokenResponse {
+  access_token: string;
+  expires_in: number;
+  refresh_token?: string;
+}
+
+function storeTokens(data: TokenResponse) {
+  sessionStorage.setItem(
+    TOKEN_KEY,
+    JSON.stringify({ accessToken: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 }),
+  );
+  // Spotify may rotate the refresh token; keep the old one if none is returned.
+  if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+}
 
 /** Must exactly match a Redirect URI registered in the Spotify dashboard. */
 export const redirectUri = () => `${window.location.origin}/callback`;
@@ -83,15 +100,12 @@ export async function completeLogin(search: URLSearchParams): Promise<string> {
   const data = await res.json();
   if (!res.ok) throw new Error(`Could not complete login (${data.error ?? res.status}).`);
 
-  sessionStorage.setItem(
-    TOKEN_KEY,
-    JSON.stringify({ accessToken: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 }),
-  );
+  storeTokens(data);
   return data.access_token;
 }
 
 /** The Spotify token from this tab's login, if it is still valid for at least a minute. */
-export function getSpotifyToken(): string | null {
+function getSpotifyToken(): string | null {
   try {
     const stored = JSON.parse(sessionStorage.getItem(TOKEN_KEY) ?? "null");
     if (stored && stored.expiresAt - Date.now() > 60_000) return stored.accessToken;
@@ -101,7 +115,48 @@ export function getSpotifyToken(): string | null {
   return null;
 }
 
+let inFlightRefresh: Promise<string | null> | null = null;
+
+/** Exchanges the stored refresh token for a new access token. Returns null if there is none or it was revoked. */
+export function refreshSpotifyToken(): Promise<string | null> {
+  // Share one request between concurrent callers: a rotated refresh token can only be used once.
+  inFlightRefresh ??= (async () => {
+    const refreshToken = localStorage.getItem(REFRESH_KEY);
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch("https://accounts.spotify.com/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: CLIENT_ID }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // 400 = invalid_grant (revoked or expired): the user has to log in again.
+        if (res.status === 400) clearSpotifyToken();
+        return null;
+      }
+      storeTokens(data as TokenResponse);
+      return (data as TokenResponse).access_token;
+    } catch {
+      return null; // network error: keep the refresh token for next time
+    }
+  })().finally(() => {
+    inFlightRefresh = null;
+  });
+  return inFlightRefresh;
+}
+
+/** A usable Spotify access token, refreshing it if needed. Null means the user must log in to Spotify again. */
+export async function getValidSpotifyToken({ forceRefresh = false } = {}): Promise<string | null> {
+  if (!forceRefresh) {
+    const token = getSpotifyToken();
+    if (token) return token;
+  }
+  return refreshSpotifyToken();
+}
+
 export function clearSpotifyToken() {
   sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem("access_token"); // left over from the first version of the app
 }
